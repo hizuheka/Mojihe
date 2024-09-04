@@ -59,7 +59,7 @@ func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subco
 		slog.Info("END utf16le-Command")
 	}()
 
-	slog.Info("START find-Command")
+	slog.Info("START utf16le-Command")
 
 	// 起動時引数のチェック
 	if err = u.validate(); err != nil {
@@ -113,6 +113,7 @@ func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subco
 		var word uint16
 		word, err = readUTF16WordLE(reader)
 		if err == io.EOF {
+			err = nil
 			break
 		}
 		if err != nil {
@@ -132,12 +133,12 @@ func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subco
 		writeUTF16RuneLE(writer, r)
 	}
 
-	fmt.Println("Transformation complete.")
 	return subcommands.ExitSuccess
 }
 
 // 変換定義ファイルを読み込み、変換マップを作成する
 func readTransformations(filePath string) (map[rune]rune, error) {
+	slog.Debug("START readTransformations")
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -178,6 +179,7 @@ func parseCodePoint(cp string) rune {
 
 // UTF-16LEで1ワード（2バイト）を読み込む
 func readUTF16WordLE(reader *bufio.Reader) (uint16, error) {
+	slog.Debug("START readUTF16WordLE")
 	bytes := make([]byte, 2)
 	_, err := io.ReadFull(reader, bytes)
 	if err != nil {
@@ -188,6 +190,7 @@ func readUTF16WordLE(reader *bufio.Reader) (uint16, error) {
 
 // 出力ファイルにUTF-16LEで1ルーン書き込む
 func writeUTF16RuneLE(writer *bufio.Writer, r rune) {
+	slog.Debug("START writeUTF16RuneLE")
 	utf16Data := utf16.Encode([]rune{r})
 	for _, word := range utf16Data {
 		writer.WriteByte(byte(word))
