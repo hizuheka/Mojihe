@@ -8,34 +8,33 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"unicode/utf16"
 
 	"github.com/google/subcommands"
 )
 
-type Utf16leCmd struct {
+type Utf8Cmd struct {
 	input  string
 	output string
 	henkan string
 }
 
-func (*Utf16leCmd) Name() string { return "utf16le" }
-func (*Utf16leCmd) Synopsis() string {
-	return "input ファイルを henkan ファイルを基に変換した結果を output ファイルに出力する"
+func (*Utf8Cmd) Name() string { return "utf8" }
+func (*Utf8Cmd) Synopsis() string {
+	return "input ファイル(utf8エンコード)を henkan ファイルを基に変換した結果を output ファイル(utf8エンコード)に出力する"
 }
-func (*Utf16leCmd) Usage() string {
-	return `utf16le -i 変換元ファイル -o 変換結果ファイル -g 変換定義ファイル:
-	変換元ファイルを変換定義ファイルを基に変換した結果を変換結果ファイルに出力する。。
+func (*Utf8Cmd) Usage() string {
+	return `utf8 -i 変換元ファイル -o 変換結果ファイル -g 変換定義ファイル:
+	変換元ファイル(UTF8エンコード)を変換定義ファイル(UTF8エンコード)を基に変換した結果を変換結果ファイルに出力する。
 `
 }
 
-func (u *Utf16leCmd) SetFlags(f *flag.FlagSet) {
+func (u *Utf8Cmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&u.input, "i", "", "変換元ファイルのパス")
 	f.StringVar(&u.output, "o", "", "変換結果ファイルのパス")
 	f.StringVar(&u.henkan, "g", "", "変換定義ファイルのパス")
 }
 
-func (u *Utf16leCmd) validate() error {
+func (u *Utf8Cmd) validate() error {
 	if u.input == "" {
 		return fmt.Errorf("引数 -i が指定されていません。")
 	}
@@ -49,16 +48,16 @@ func (u *Utf16leCmd) validate() error {
 	return nil
 }
 
-func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subcommands.ExitStatus {
+func (u *Utf8Cmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	var err error
 	defer func() {
 		if err != nil {
 			slog.Error(err.Error())
 		}
-		slog.Info("END utf16le-Command")
+		slog.Info("END utf8-Command")
 	}()
 
-	slog.Info("START utf16le-Command")
+	slog.Info("START utf8-Command")
 
 	// 起動時引数のチェック
 	if err = u.validate(); err != nil {
@@ -90,27 +89,16 @@ func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subco
 	}
 	defer outputFile.Close()
 
-	// 出力ファイルにBOMを書き込む
-	outputFile.Write([]byte{0xFF, 0xFE})
-
 	// 入力ファイルをバッファリングして読み込み
 	reader := bufio.NewReader(inputFile)
 	writer := bufio.NewWriter(outputFile)
 	defer writer.Flush()
 
-	// BOMをスキップ
-	bom := make([]byte, 2)
-	_, err = io.ReadFull(reader, bom)
-	if err != nil {
-		slog.Error("Error reading BOM:")
-		return subcommands.ExitFailure
-	}
-
-	// UTF-16LEを1ルーンずつ読み込み、変換して出力
+	// 1ルーンずつ読み込み、変換して出力
 	for {
-		// UTF-16LEで2バイトずつ読み込む
-		var word uint16
-		word, err = readUTF16WordLE(reader)
+		// 1文字ずつ読み込む
+		var r rune
+		r, _, err = reader.ReadRune()
 		if err == io.EOF {
 			err = nil
 			break
@@ -120,38 +108,18 @@ func (u *Utf16leCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...any) subco
 			return subcommands.ExitFailure
 		}
 
-		runes := utf16.Decode([]uint16{word})
-		r := runes[0]
-
 		// 変換を適用
 		if newR, found := transMap[r]; found {
 			r = newR
 		}
 
-		// 出力ファイルにUTF-16LEで書き込む
-		writeUTF16RuneLE(writer, r)
+		// 変換された文字を書き込む
+		_, err = writer.WriteRune(r)
+		if err != nil {
+			slog.Error("Error write output file:")
+			return subcommands.ExitFailure
+		}
 	}
 
 	return subcommands.ExitSuccess
-}
-
-// UTF-16LEで1ワード（2バイト）を読み込む
-func readUTF16WordLE(reader *bufio.Reader) (uint16, error) {
-	slog.Debug("START readUTF16WordLE")
-	bytes := make([]byte, 2)
-	_, err := io.ReadFull(reader, bytes)
-	if err != nil {
-		return 0, err
-	}
-	return uint16(bytes[1])<<8 | uint16(bytes[0]), nil
-}
-
-// 出力ファイルにUTF-16LEで1ルーン書き込む
-func writeUTF16RuneLE(writer *bufio.Writer, r rune) {
-	slog.Debug("START writeUTF16RuneLE")
-	utf16Data := utf16.Encode([]rune{r})
-	for _, word := range utf16Data {
-		writer.WriteByte(byte(word))
-		writer.WriteByte(byte(word >> 8))
-	}
 }
